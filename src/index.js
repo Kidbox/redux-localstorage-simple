@@ -9,6 +9,38 @@ const DEBOUNCE_DEFAULT = 0
 const IMMUTABLEJS_DEFAULT = false
 const DISABLE_WARNINGS_DEFAULT = false
 let debounceTimeout = null
+let storage = window.localStorage;
+
+if (!storage) {
+  storage = {
+    setItem: function() {},
+    getItem: function() {},
+    clear: function() {},
+    removeItem: function() {},
+    length: 0
+  }
+} else {
+  Storage.prototype._setItem = Storage.prototype.setItem;
+  Storage.prototype.setItem = function(key, value)
+  {
+    try {
+      this._setItem(key, JSON.stringify(value));
+    } catch (e) {
+      console.warn(e);
+    }
+  }
+
+  Storage.prototype._getItem = Storage.prototype.getItem;
+  Storage.prototype.getItem = function(key, value)
+  {
+    try {
+      return JSON.parse(this._getItem(key, value));
+    } catch (e) {
+      console.warn(e);
+      return null;
+    }
+  }
+}
 
 // ---------------------------------------------------
 /* warn
@@ -208,10 +240,10 @@ export function save ({
     // Local function to avoid duplication of code above
     function _save () {
       if (states.length === 0) {
-        localStorage[namespace] = JSON.stringify(store.getState())
+        storage.setItem(namespace, store.getState());
       } else {
         states.forEach(state => {          
-          localStorage[namespace + '_' + state] = JSON.stringify(getStateForLocalStorage(state, store.getState()))
+          storage.setItem(namespace + '_' + state, getStateForLocalStorage(state, store.getState()));
         })
       }
     }
@@ -284,13 +316,13 @@ export function load ({
 
   // Load all of the namespaced Redux data from LocalStorage into local Redux state tree
   if (states.length === 0) {
-    if (localStorage[namespace]) {
-      loadedState = JSON.parse(localStorage[namespace])
+    if (storage.getItem(namespace)) {
+      loadedState = storage.getItem(namespace);
     }
   } else { // Load only specified states into the local Redux state tree
     states.forEach(function (state) {      
-      if (localStorage[namespace + '_' + state]) {
-        loadedState = objectMerge(loadedState, realiseObject(state, JSON.parse(localStorage[namespace + '_' + state])))
+      if (storage.getItem(namespace + '_' + state)) {
+        loadedState = objectMerge(loadedState, realiseObject(state, storage.getItem(namespace + '_' + state)));
       } else {
         warn_("Invalid load '" + (namespace + '_' + state) + "' provided. Check your 'states' in 'load()'. If this is your first time running this app you may see this message. To disable it in future use the 'disableWarnings' flag, see documentation.")
       }
@@ -366,7 +398,7 @@ export function clear ({ namespace = NAMESPACE_DEFAULT } = {}) {
   for (let key in localStorage) {
     // key starts with namespace
     if (key.slice(0, namespace.length) === namespace) {
-      localStorage.removeItem(key)
+      storage.removeItem(key)
     }
   }
 }

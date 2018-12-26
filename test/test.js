@@ -1653,6 +1653,36 @@
 	var IMMUTABLEJS_DEFAULT = false;
 	var DISABLE_WARNINGS_DEFAULT = false;
 	var debounceTimeout = null;
+	var storage = window.localStorage;
+
+	if (!storage) {
+	  storage = {
+	    setItem: function setItem() {},
+	    getItem: function getItem() {},
+	    clear: function clear() {},
+	    removeItem: function removeItem() {},
+	    length: 0
+	  };
+	} else {
+	  Storage.prototype._setItem = Storage.prototype.setItem;
+	  Storage.prototype.setItem = function (key, value) {
+	    try {
+	      this._setItem(key, JSON.stringify(value));
+	    } catch (e) {
+	      console.warn(e);
+	    }
+	  };
+
+	  Storage.prototype._getItem = Storage.prototype.getItem;
+	  Storage.prototype.getItem = function (key, value) {
+	    try {
+	      return JSON.parse(this._getItem(key, value));
+	    } catch (e) {
+	      console.warn(e);
+	      return null;
+	    }
+	  };
+	}
 
 	// ---------------------------------------------------
 	/* warn
@@ -1810,7 +1840,7 @@
 	  return function (store) {
 	    return function (next) {
 	      return function (action) {
-	        next(action);
+	        var returnValue = next(action);
 
 	        // Validate 'states' parameter
 	        if (!isArray(states)) {
@@ -1860,13 +1890,15 @@
 	        // Local function to avoid duplication of code above
 	        function _save() {
 	          if (states.length === 0) {
-	            localStorage[namespace] = JSON.stringify(store.getState());
+	            storage.setItem(namespace, store.getState());
 	          } else {
 	            states.forEach(function (state) {
-	              localStorage[namespace + '_' + state] = JSON.stringify(getStateForLocalStorage(state, store.getState()));
+	              storage.setItem(namespace + '_' + state, getStateForLocalStorage(state, store.getState()));
 	            });
 	          }
 	        }
+
+	        return returnValue;
 	      };
 	    };
 	  };
@@ -1942,14 +1974,14 @@
 
 	  // Load all of the namespaced Redux data from LocalStorage into local Redux state tree
 	  if (states.length === 0) {
-	    if (localStorage[namespace]) {
-	      loadedState = JSON.parse(localStorage[namespace]);
+	    if (storage.getItem(namespace)) {
+	      loadedState = storage.getItem(namespace);
 	    }
 	  } else {
 	    // Load only specified states into the local Redux state tree
 	    states.forEach(function (state) {
-	      if (localStorage[namespace + '_' + state]) {
-	        loadedState = (0, _objectMerge2.default)(loadedState, realiseObject(state, JSON.parse(localStorage[namespace + '_' + state])));
+	      if (storage.getItem(namespace + '_' + state)) {
+	        loadedState = (0, _objectMerge2.default)(loadedState, realiseObject(state, storage.getItem(namespace + '_' + state)));
 	      } else {
 	        warn_("Invalid load '" + (namespace + '_' + state) + "' provided. Check your 'states' in 'load()'. If this is your first time running this app you may see this message. To disable it in future use the 'disableWarnings' flag, see documentation.");
 	      }
@@ -2033,7 +2065,7 @@
 	  for (var key in localStorage) {
 	    // key starts with namespace
 	    if (key.slice(0, namespace.length) === namespace) {
-	      localStorage.removeItem(key);
+	      storage.removeItem(key);
 	    }
 	  }
 	}
